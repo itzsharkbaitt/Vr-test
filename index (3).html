@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Palmshift</title>
+<style>
+  :root{
+    --lime:#baff48;
+    --cyan:#55ddff;
+    --ink:#080d1b;
+    --panel:rgba(12,20,38,.72);
+    --line:rgba(130,170,220,.22);
+    --text:#e8f1ff;
+    --muted:#8fa3c2;
+  }
+  *{box-sizing:border-box}
+  [hidden]{display:none!important}
+  html,body{
+    margin:0;height:100%;overflow:hidden;
+    background:var(--ink);color:var(--text);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  canvas#world{position:fixed;inset:0;display:block;touch-action:none}
+
+  /* Start screen */
+  #start-screen{
+    position:fixed;inset:0;z-index:10;
+    display:flex;align-items:center;justify-content:center;
+    padding:24px;
+    background:radial-gradient(ellipse at 50% 40%,rgba(8,13,27,.55),rgba(8,13,27,.92));
+    backdrop-filter:blur(6px);
+    transition:opacity .35s ease,visibility .35s ease;
+  }
+  #start-screen.hidden{opacity:0;visibility:hidden;pointer-events:none}
+  .card{
+    width:min(440px,100%);
+    padding:36px 32px 28px;
+    border:1px solid var(--line);border-radius:20px;
+    background:var(--panel);
+    box-shadow:0 24px 80px rgba(0,0,0,.45);
+    text-align:center;
+  }
+  .card h1{
+    margin:0 0 6px;font-size:2.6rem;letter-spacing:.22em;font-weight:800;
+    background:linear-gradient(90deg,var(--lime),var(--cyan));
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    padding-left:.22em;
+  }
+  .card .tag{margin:0 0 26px;color:var(--muted);font-size:.95rem;line-height:1.5}
+  .actions{display:flex;flex-direction:column;gap:10px}
+  .btn{
+    appearance:none;cursor:pointer;
+    padding:14px 18px;border-radius:12px;
+    font:inherit;font-weight:700;font-size:1rem;letter-spacing:.02em;
+    border:1px solid transparent;
+    transition:transform .12s ease,filter .12s ease,background .12s ease;
+  }
+  .btn:hover{filter:brightness(1.1)}
+  .btn:active{transform:translateY(1px)}
+  .btn:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
+  .btn.primary{background:var(--lime);color:#10200a}
+  .btn.secondary{background:transparent;color:var(--text);border-color:var(--line)}
+  .btn.secondary:hover{background:rgba(85,221,255,.08);border-color:rgba(85,221,255,.45)}
+  #device-note{margin:18px 0 0;color:var(--muted);font-size:.85rem;line-height:1.5;min-height:1.3em}
+  .how{
+    margin:20px 0 0;padding-top:16px;border-top:1px solid var(--line);
+    color:var(--muted);font-size:.8rem;line-height:1.6;text-align:left;
+  }
+  .how b{color:var(--text);font-weight:600}
+  #device-note.warn{color:#ffd37a}
+  .btn.unavailable{opacity:.7}
+  .help{margin:14px 0 0;color:var(--muted);font-size:.8rem;line-height:1.6;text-align:left}
+  .help summary{cursor:pointer;color:var(--text);font-weight:600}
+  .help ul{margin:8px 0 0;padding-left:18px}
+  .help li{margin-bottom:6px}
+  .help b{color:var(--text);font-weight:600}
+
+  /* HUD */
+  #hud{
+    position:fixed;left:18px;top:18px;z-index:5;
+    display:flex;gap:10px;pointer-events:none;
+    transition:opacity .3s ease;
+  }
+  .stat{
+    min-width:104px;padding:10px 14px;
+    border:1px solid var(--line);border-radius:12px;
+    background:var(--panel);backdrop-filter:blur(6px);
+  }
+  .stat .label{display:block;font-size:.65rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  .stat .value{display:block;margin-top:2px;font-size:1.35rem;font-weight:700;font-variant-numeric:tabular-nums}
+  .stat .value small{font-size:.7rem;font-weight:500;color:var(--muted);margin-left:3px}
+  .stat.speed .value{color:var(--lime)}
+  .stat.land .value{color:var(--cyan)}
+
+  #corner-note{
+    position:fixed;left:18px;bottom:16px;z-index:5;
+    color:var(--muted);font-size:.8rem;letter-spacing:.04em;
+    pointer-events:none;transition:opacity .3s ease;
+  }
+
+  #exit-game{
+    position:fixed;right:18px;top:18px;z-index:6;
+    display:none;padding:9px 16px;font-size:.85rem;
+    background:var(--panel);color:var(--text);border-color:var(--line);
+    backdrop-filter:blur(6px);
+  }
+  #exit-game.visible{display:block}
+
+  #toast{
+    position:fixed;left:50%;bottom:48px;z-index:20;
+    transform:translate(-50%,12px);
+    padding:10px 18px;border-radius:999px;
+    background:rgba(12,20,38,.88);border:1px solid var(--line);
+    color:var(--text);font-size:.9rem;
+    opacity:0;pointer-events:none;
+    transition:opacity .25s ease,transform .25s ease;
+  }
+  #toast.visible{opacity:1;transform:translate(-50%,0)}
+
+  /* Hide overlays while the start screen is up or in a headset */
+  #start-screen:not(.hidden) ~ #hud,
+  #start-screen:not(.hidden) ~ #corner-note{opacity:0}
+  body.in-vr #hud,
+  body.in-vr #corner-note,
+  body.in-vr #exit-game{display:none}
+</style>
+</head>
+<body>
+  <canvas id="world"></canvas>
+
+  <div id="start-screen">
+    <div class="card">
+      <h1>PALMSHIFT</h1>
+      <p class="tag">Push off glowing pads with your hands to launch yourself across the course.</p>
+      <div class="actions">
+        <button id="enter-vr" class="btn primary" type="button">Enter VR</button>
+        <button id="play-desktop" class="btn secondary" type="button">Play on screen</button>
+      </div>
+      <p id="device-note">Desktop mode uses WASD and mouse look.</p>
+      <p class="how">
+        <b>On screen:</b> click the scene to capture the mouse, look around, and move with WASD or the arrow keys.
+        Your hands float in front of you; brush a lit pad to push off it.<br>
+        <b>In VR:</b> touch a pad with a controller and swipe against it to launch. The dotted arc previews your flight.
+      </p>
+      <details class="help">
+        <summary>VR won't start?</summary>
+        <ul>
+          <li><b>Quest or other standalone headset:</b> WebXR needs the page on https. Put this file on a static host (Netlify Drop, GitHub Pages, etc.) and open that link in the headset's browser. A file saved on your PC or opened over plain http won't offer VR there.</li>
+          <li><b>PC headset:</b> connect it and start its runtime (SteamVR, Meta Link, Windows Mixed Reality), then reload in Chrome or Edge.</li>
+          <li><b>No headset:</b> use Play on screen, or try the Immersive Web Emulator browser extension to simulate one.</li>
+        </ul>
+      </details>
+    </div>
+  </div>
+
+  <div id="hud">
+    <div class="stat speed"><span class="label">Speed</span><span class="value"><span id="speed">0.0</span><small>m/s</small></span></div>
+    <div class="stat land"><span class="label">Landing</span><span class="value" id="landing">—</span></div>
+  </div>
+  <div id="corner-note"></div>
+  <button id="exit-game" class="btn" type="button">Exit</button>
+  <div id="toast" role="status" aria-live="polite"></div>
+
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js';
+const canvas=document.querySelector('#world');const renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.xr.enabled=true;renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.15;
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x080d1b);scene.fog=new THREE.FogExp2(0x080d1b,.028);const rig=new THREE.Group();scene.add(rig);const camera=new THREE.PerspectiveCamera(72,innerWidth/innerHeight,.05,120);camera.position.set(0,.79,0);rig.add(camera);
+scene.add(new THREE.HemisphereLight(0xb2d7ff,0x182038,1.6));const key=new THREE.DirectionalLight(0xe4f4ff,2.5);key.position.set(-8,13,7);key.castShadow=true;key.shadow.mapSize.set(1024,1024);scene.add(key);const cyanLight=new THREE.PointLight(0x29caff,24,15);cyanLight.position.set(0,4,-5);scene.add(cyanLight);const limeLight=new THREE.PointLight(0xbaff46,14,12);limeLight.position.set(-5,3,3);scene.add(limeLight);
+const mat=(color,roughness=.55,metalness=.12)=>new THREE.MeshStandardMaterial({color,roughness,metalness});const floorMat=mat(0x111b2b,.78,.14),topMat=mat(0x192942,.45,.22),limeMat=new THREE.MeshStandardMaterial({color:0xbaff48,emissive:0x527e11,emissiveIntensity:1.2,roughness:.32}),cyanMat=new THREE.MeshStandardMaterial({color:0x55ddff,emissive:0x087d9d,emissiveIntensity:1.15,roughness:.3});
+const floor=new THREE.Mesh(new THREE.PlaneGeometry(80,80),floorMat);floor.rotation.x=-Math.PI/2;floor.position.y=-.04;floor.receiveShadow=true;scene.add(floor);const grid=new THREE.GridHelper(80,80,0x33465f,0x1d2c43);grid.position.y=-.025;grid.material.transparent=true;grid.material.opacity=.38;scene.add(grid);
+const platforms=[{x:0,y:.34,z:-3.5,w:2.2,d:2.1,c:'lime'},{x:-3.7,y:.62,z:-5.8,w:2.6,d:2.2,c:'cyan'},{x:3.7,y:.82,z:-6.7,w:2.8,d:2.1,c:'lime'},{x:-6.1,y:1.08,z:-9.2,w:2.6,d:2.4,c:'lime'},{x:0,y:1.4,z:-10.3,w:3.4,d:2.4,c:'cyan'},{x:6.2,y:1.55,z:-10.8,w:3,d:2.6,c:'lime'},{x:-3.1,y:2.25,z:-14,w:3.1,d:2.5,c:'lime'},{x:3.5,y:2.7,z:-15.3,w:3.3,d:2.7,c:'cyan'},{x:0,y:3.8,z:-20,w:4,d:3,c:'lime'}];const surfaceMeshes=[];
+for(const p of platforms){const group=new THREE.Group();group.position.set(p.x,p.y,p.z);scene.add(group);const block=new THREE.Mesh(new THREE.BoxGeometry(p.w,.38,p.d),topMat);block.castShadow=true;block.receiveShadow=true;group.add(block);const edge=new THREE.Mesh(new THREE.BoxGeometry(p.w+.025,.035,p.d+.025),p.c==='cyan'?cyanMat:limeMat);edge.position.y=.205;group.add(edge);const inset=new THREE.Mesh(new THREE.BoxGeometry(p.w*.62,.014,.025),p.c==='cyan'?cyanMat:limeMat);inset.position.set(0,.23,0);group.add(inset);surfaceMeshes.push({x:p.x,z:p.z,top:p.y+.21,w:p.w,d:p.d})}
+for(let i=0;i<5;i++){const z=-7-i*3.2;const ring=new THREE.Mesh(new THREE.TorusGeometry(2.25-i*.08,.025,8,80),i%2?cyanMat:limeMat);ring.position.set((i%2?1:-1)*.7,2.2+i*.36,z);ring.rotation.y=i%2?.16:-.13;scene.add(ring)}for(let i=0;i<24;i++){const a=i/24*Math.PI*2,r=19+(i%3)*2,h=2+(i*7%5)*.65;const fin=new THREE.Mesh(new THREE.BoxGeometry(.045,h,.045),i%4===0?limeMat:cyanMat);fin.position.set(Math.cos(a)*r,h/2-.04,Math.sin(a)*r-8);scene.add(fin)}
+const landingGroup=new THREE.Group();scene.add(landingGroup);const landingRing=new THREE.Mesh(new THREE.TorusGeometry(.42,.025,8,48),limeMat);landingRing.rotation.x=Math.PI/2;landingGroup.add(landingRing);const landingDot=new THREE.Mesh(new THREE.SphereGeometry(.075,12,10),limeMat);landingGroup.add(landingDot);
+const handVisuals=[],handState=[],handGeo=new THREE.SphereGeometry(.105,18,14);for(let i=0;i<2;i++){const hand=new THREE.Mesh(handGeo,new THREE.MeshStandardMaterial({color:i===0?0xbaff48:0x5cddff,emissive:i===0?0x52821a:0x08768f,emissiveIntensity:1.45,roughness:.22}));hand.castShadow=true;scene.add(hand);const target=new THREE.Mesh(new THREE.TorusGeometry(.17,.012,6,32),i===0?limeMat:cyanMat);target.rotation.x=Math.PI/2;scene.add(target);handVisuals.push({hand,target});handState.push({previous:new THREE.Vector3(),previousRig:new THREE.Vector3(),localPose:new THREE.Vector3(),anchorLocal:new THREE.Vector3(),anchorWorld:new THREE.Vector3(),velocity:new THREE.Vector3(),ready:false,contact:false,anchored:false})}
+const predictionDots=[];for(let i=0;i<14;i++){const dot=new THREE.Mesh(new THREE.SphereGeometry(.04-i*.0015,8,6),new THREE.MeshBasicMaterial({color:0xbaff54,transparent:true,opacity:.78-i*.035}));scene.add(dot);predictionDots.push(dot)}
+const velocity=new THREE.Vector3(),cameraDir=new THREE.Vector3();let lastTime=performance.now(),playing=false,desktop=false,yaw=0,pitch=0,grounded=false;const keys=Object.create(null);let pointerLocked=false;const ui={screen:document.querySelector('#start-screen'),enter:document.querySelector('#enter-vr'),desktop:document.querySelector('#play-desktop'),note:document.querySelector('#device-note'),corner:document.querySelector('#corner-note'),speed:document.querySelector('#speed'),landing:document.querySelector('#landing'),exit:document.querySelector('#exit-game'),toast:document.querySelector('#toast')};
+function toast(message){ui.toast.textContent=message;ui.toast.classList.add('visible');setTimeout(()=>ui.toast.classList.remove('visible'),2100)}function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix()}addEventListener('resize',resize);
+function contactSurface(pos){let top=pos.y<.13?0:null;for(const p of surfaceMeshes){if(Math.abs(pos.x-p.x)<p.w/2+.13&&Math.abs(pos.z-p.z)<p.d/2+.13&&pos.y>=p.top-.17&&pos.y<p.top+.27)top=Math.max(top??-99,p.top)}return top}
+function handPositions(dt){rig.updateMatrixWorld(true);const inVR=renderer.xr.isPresenting;if(inVR){for(let i=0;i<2;i++){const ctrl=renderer.xr.getController(i);ctrl.updateWorldMatrix(true,false);ctrl.getWorldPosition(handVisuals[i].hand.position);handVisuals[i].hand.position.add(rig.position)}}else if(desktop){camera.getWorldDirection(cameraDir);const right=new THREE.Vector3().crossVectors(cameraDir,new THREE.Vector3(0,1,0)).negate().normalize();for(let i=0;i<2;i++){const side=i===0?-1:1,h=handVisuals[i].hand.position;camera.getWorldPosition(h);h.addScaledVector(cameraDir,.62).addScaledVector(right,side*.33);h.y-=.34}}
+for(let i=0;i<2;i++){const hand=handVisuals[i].hand,target=handVisuals[i].target,state=handState[i];if(inVR)state.localPose.copy(renderer.xr.getController(i).position);else state.localPose.copy(hand.position).sub(rig.position);if(state.anchored&&state.localPose.distanceTo(state.anchorLocal)>.28)state.anchored=false;if(state.anchored)hand.position.copy(state.anchorWorld);if(state.ready&&dt>0&&!state.anchored)state.velocity.copy(hand.position).sub(state.previous).sub(rig.position).add(state.previousRig).multiplyScalar(1/dt);else state.velocity.set(0,0,0);const top=contactSurface(hand.position);state.contact=top!==null&&Math.abs(hand.position.y-top)<.26;if(state.contact&&!state.anchored&&state.velocity.length()<.42){state.anchored=true;state.anchorWorld.copy(hand.position);state.anchorLocal.copy(state.localPose);state.velocity.set(0,0,0)}if(state.contact){target.visible=true;target.position.set(hand.position.x,top+.025,hand.position.z)}else target.visible=false;state.previous.copy(hand.position);state.previousRig.copy(rig.position);state.ready=true}}
+function pushFromHands(dt){for(const s of handState){if(!s.contact||s.anchored)continue;const horizontal=Math.hypot(s.velocity.x,s.velocity.z),downward=Math.max(0,-s.velocity.y);if(horizontal>.5||downward>.55){const horizontalImpulse=Math.min(2.4,horizontal*.55);if(horizontal>.001){velocity.x-=s.velocity.x/horizontal*horizontalImpulse;velocity.z-=s.velocity.z/horizontal*horizontalImpulse}velocity.y+=Math.min(2.4,downward*.55+horizontal*.08);s.contact=false}}}
+function updateDesktop(dt){if(!desktop)return;const forward=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw)),right=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw)),input=new THREE.Vector3();if(keys.KeyW||keys.ArrowUp)input.add(forward);if(keys.KeyS||keys.ArrowDown)input.sub(forward);if(keys.KeyD||keys.ArrowRight)input.add(right);if(keys.KeyA||keys.ArrowLeft)input.sub(right);if(input.lengthSq())velocity.addScaledVector(input.normalize(),5.4*dt)}
+function constrainBodyToHands(){for(const state of handState){if(!state.anchored)continue;const shoulderY=.48,maxReach=1.35,dx=rig.position.x-state.anchorWorld.x,dy=rig.position.y+shoulderY-state.anchorWorld.y,dz=rig.position.z-state.anchorWorld.z,distance=Math.hypot(dx,dy,dz);if(distance<=maxReach||distance<1e-5)continue;const nx=dx/distance,ny=dy/distance,nz=dz/distance,correction=distance-maxReach;rig.position.x-=nx*correction;rig.position.y-=ny*correction;rig.position.z-=nz*correction;const outward=velocity.x*nx+velocity.y*ny+velocity.z*nz;if(outward>0){velocity.x-=nx*outward;velocity.y-=ny*outward;velocity.z-=nz*outward}}}
+function collideBodyWithPlatforms(){const radius=.22,height=Math.max(.65,camera.position.y);for(const p of surfaceMeshes){const bottom=p.top-.4;if(rig.position.y>=p.top-.02||rig.position.y+height<=bottom)continue;const left=p.x-p.w/2,right=p.x+p.w/2,near=p.z-p.d/2,far=p.z+p.d/2,cx=THREE.MathUtils.clamp(rig.position.x,left,right),cz=THREE.MathUtils.clamp(rig.position.z,near,far);let dx=rig.position.x-cx,dz=rig.position.z-cz,distance=Math.hypot(dx,dz);if(distance>=radius)continue;let nx,nz;if(distance>1e-5){nx=dx/distance;nz=dz/distance;const push=radius-distance;rig.position.x+=nx*push;rig.position.z+=nz*push}else{const edges=[{d:rig.position.x-left,nx:-1,nz:0},{d:right-rig.position.x,nx:1,nz:0},{d:rig.position.z-near,nx:0,nz:-1},{d:far-rig.position.z,nx:0,nz:1}].sort((a,b)=>a.d-b.d);nx=edges[0].nx;nz=edges[0].nz;const push=edges[0].d+radius;if(nx)rig.position.x+=nx*push;else rig.position.z+=nz*push}const inward=velocity.x*nx+velocity.z*nz;if(inward<0){velocity.x-=nx*inward;velocity.z-=nz*inward}}}
+function updateMovement(dt){updateDesktop(dt);pushFromHands(dt);velocity.y-=9.4*dt;const previousY=rig.position.y;rig.position.addScaledVector(velocity,dt);constrainBodyToHands();let floorY=0;for(const p of surfaceMeshes){const inside=Math.abs(rig.position.x-p.x)<p.w/2-.18&&Math.abs(rig.position.z-p.z)<p.d/2-.18;const crossedTop=previousY>=p.top-.02&&rig.position.y<=p.top&&velocity.y<=0;if(inside&&crossedTop)floorY=Math.max(floorY,p.top)}if(rig.position.y<floorY){rig.position.y=floorY;if(velocity.y<0)velocity.y=0;grounded=true}else grounded=false;collideBodyWithPlatforms();const drag=grounded?Math.exp(-13*dt):Math.exp(-2.8*dt);velocity.x*=drag;velocity.z*=drag;velocity.x=THREE.MathUtils.clamp(velocity.x,-9,9);velocity.z=THREE.MathUtils.clamp(velocity.z,-9,9);if(rig.position.y < -15){rig.position.set(0,0,1);velocity.set(0,0,0);toast('Back to the launch pad')}}
+function updatePrediction(){const speed=Math.hypot(velocity.x,velocity.z);ui.speed.textContent=speed.toFixed(1);const gravity=9.4,eyeHeight=camera.position.y,y0=rig.position.y+eyeHeight;let t=0;if(velocity.y>0){const disc=velocity.y*velocity.y+2*gravity*Math.max(0,y0-eyeHeight);t=(velocity.y+Math.sqrt(disc))/gravity}else t=Math.max(.2,Math.sqrt(Math.max(0,2*Math.max(0,y0-eyeHeight)/gravity)));t=THREE.MathUtils.clamp(t,.18,2.7);const landing=new THREE.Vector3(rig.position.x+velocity.x*t*.78,.035,rig.position.z+velocity.z*t*.78);landingGroup.position.copy(landing);landingGroup.visible=speed>.35||Math.abs(velocity.y)>.5;ui.landing.textContent=landingGroup.visible?Math.hypot(landing.x-rig.position.x,landing.z-rig.position.z).toFixed(1)+' m':'—';for(let i=0;i<predictionDots.length;i++){const u=(i+1)/predictionDots.length,step=t*u,point=new THREE.Vector3(rig.position.x+velocity.x*step*.8,y0+velocity.y*step-.5*gravity*step*step,rig.position.z+velocity.z*step*.8);predictionDots[i].position.copy(point);predictionDots[i].visible=landingGroup.visible&&point.y>rig.position.y+.1}}
+function animate(now){const dt=Math.min((now-lastTime)/1000,.04);lastTime=now;if(playing){handPositions(dt);updateMovement(dt);updatePrediction()}renderer.render(scene,camera)}renderer.setAnimationLoop(animate);
+function setNote(text,warn){ui.note.textContent=text;ui.note.classList.toggle('warn',!!warn)}
+function whyNoVR(error){
+  if(!navigator.xr)return window.isSecureContext
+    ?'This browser has no WebXR support. Use Meta Quest Browser, or Chrome/Edge on a PC with a headset connected.'
+    :'WebXR needs a secure page (https:// or localhost). Host this file over https and open that link in your headset.';
+  if(error&&error.name==='NotSupportedError')return 'No VR headset found. Connect your headset and start its runtime (SteamVR, Meta Link, WMR), then reload.';
+  if(error&&error.name==='SecurityError')return 'VR was blocked for this page. That happens when it is embedded in another site’s frame or is not served over https. Open it from a static host to use VR.';
+  if(error&&error.name==='NotAllowedError')return 'VR was blocked or declined. Allow it when the browser asks, then try again.';
+  return (error&&error.message)||'Could not start a VR session.';
+}
+async function startVR(){
+  if(!navigator.xr){setNote(whyNoVR(),true);toast('VR isn’t available here');return}
+  try{
+    const session=await navigator.xr.requestSession('immersive-vr',{optionalFeatures:['local-floor','bounded-floor','hand-tracking']});
+    await renderer.xr.setSession(session);
+    document.body.classList.add('in-vr');playing=true;desktop=false;ui.screen.classList.add('hidden');ui.exit.classList.remove('visible');
+    session.addEventListener('end',()=>{document.body.classList.remove('in-vr');playing=false;ui.screen.classList.remove('hidden')},{once:true});
+  }catch(error){console.error('WebXR session failed:',error);setNote(whyNoVR(error),true);toast('Couldn’t start VR')}
+}
+ui.enter.addEventListener('click',startVR);ui.desktop.addEventListener('click',()=>{desktop=true;playing=true;ui.screen.classList.add('hidden');ui.exit.classList.add('visible');ui.corner.textContent='WASD move · mouse look';toast('Push off the lit pads to launch')});ui.exit.addEventListener('click',()=>{desktop=false;playing=false;ui.screen.classList.remove('hidden');ui.exit.classList.remove('visible');document.exitPointerLock?.()});
+addEventListener('keydown',e=>{keys[e.code]=true;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault()});addEventListener('keyup',e=>keys[e.code]=false);canvas.addEventListener('click',()=>{if(desktop&&!pointerLocked)canvas.requestPointerLock?.()});document.addEventListener('pointerlockchange',()=>pointerLocked=document.pointerLockElement===canvas);addEventListener('mousemove',e=>{if(pointerLocked&&desktop){yaw-=e.movementX*.0022;pitch=THREE.MathUtils.clamp(pitch-e.movementY*.0018,-1.1,1.1);rig.rotation.y=yaw;camera.rotation.x=pitch}});
+async function refreshXR(){
+  let available=false,reason='';
+  if(!navigator.xr)reason=whyNoVR();
+  else{try{available=await navigator.xr.isSessionSupported('immersive-vr');if(!available)reason=whyNoVR({name:'NotSupportedError'})}catch(error){reason=whyNoVR(error)}}
+  ui.enter.classList.toggle('unavailable',!available);
+  if(available)setNote('Headset detected. Push off surfaces with your controllers; the arc previews your flight.',false);
+  else setNote(reason+' Play on screen still works.',true);
+}
+refreshXR();navigator.xr?.addEventListener?.('devicechange',refreshXR)
+</script>
+</body>
+</html>
